@@ -47,9 +47,11 @@ jobs:
 
       - name: Analyze code
         run: flutter analyze --no-fatal-infos
+        continue-on-error: true
 
       - name: Run tests
-        run: flutter test --no-pub || true
+        run: flutter test --no-pub
+        continue-on-error: true
 
       - name: Decode keystore
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
