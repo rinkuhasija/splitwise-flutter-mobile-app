@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'theme/app_theme.dart';
 import 'providers/data_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/auth/auth_wrapper.dart';
 
 void main() async {
@@ -20,12 +21,21 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => DataProvider())],
-      child: MaterialApp(
-        title: 'Splitwise Clone',
-        theme: AppTheme.darkTheme,
-        home: const AuthWrapper(),
-        debugShowCheckedModeBanner: false,
+      providers: [
+        ChangeNotifierProvider(create: (_) => DataProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Splitwise Clone',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            home: const AuthWrapper(),
+            debugShowCheckedModeBanner: false,
+          );
+        },
       ),
     );
   }

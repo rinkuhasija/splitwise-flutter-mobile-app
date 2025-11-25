@@ -6,6 +6,7 @@ class Expense {
   final String payerId;
   final String groupId;
   final Map<String, double> splitDetails; // UserId -> Amount
+  final bool isSettlement; // Flag to identify settlement transactions
 
   Expense({
     required this.id,
@@ -16,6 +17,7 @@ class Expense {
     required this.groupId,
     required this.splitDetails,
     this.participantIds = const [],
+    this.isSettlement = false,
   });
 
   final List<String> participantIds;

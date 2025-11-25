@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/data_provider.dart';
 import '../../../models/user.dart';
 import '../../../theme/app_theme.dart';
 import '../../friends/friend_details_screen.dart';
@@ -35,15 +37,28 @@ class FriendItem extends StatelessWidget {
         user.name,
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
-      subtitle: Text(
-        'owes you ₹0.00', // Dummy status
-        style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7)),
-      ),
-      trailing: Text(
-        'settled',
-        style: Theme.of(
+      subtitle: FutureBuilder<double>(
+        future: Provider.of<DataProvider>(
           context,
-        ).textTheme.labelSmall?.copyWith(color: AppTheme.textSecondary),
+          listen: true,
+        ).getFriendBalance(user.id),
+        builder: (context, snapshot) {
+          final balance = snapshot.data ?? 0.0;
+          if (balance == 0) {
+            return Text(
+              'settled up',
+              style: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7)),
+            );
+          }
+          final isOwed = balance > 0;
+          return Text(
+            '${isOwed ? 'owes you' : 'you owe'} ₹${balance.abs().toStringAsFixed(2)}',
+            style: TextStyle(
+              color: isOwed ? AppTheme.success : AppTheme.accent,
+              fontWeight: FontWeight.bold,
+            ),
+          );
+        },
       ),
       onTap: () {
         Navigator.push(

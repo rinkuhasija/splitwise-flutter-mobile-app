@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import '../../../models/group.dart';
 import '../../../theme/app_theme.dart';
 import '../../groups/group_details_screen.dart';
+import '../../../providers/data_provider.dart';
 
 class GroupCard extends StatelessWidget {
   final Group group;
@@ -65,34 +67,50 @@ class GroupCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'you owe',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppTheme.accent,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                        '₹${(group.totalExpenses / 3).toStringAsFixed(2)}', // Dummy calculation
+              FutureBuilder<double>(
+                future: Provider.of<DataProvider>(
+                  context,
+                  listen: true,
+                ).getGroupBalance(group.id),
+                builder: (context, snapshot) {
+                  final balance = snapshot.data ?? 0.0;
+                  final isOwed = balance > 0;
+                  final absBalance = balance.abs();
+
+                  if (balance == 0) {
+                    return Text(
+                      'settled up',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        isOwed ? 'you are owed' : 'you owe',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: isOwed ? AppTheme.success : AppTheme.accent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '₹${absBalance.toStringAsFixed(2)}',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
-                              color: AppTheme.accent,
+                              color: isOwed
+                                  ? AppTheme.success
+                                  : AppTheme.accent,
                               fontWeight: FontWeight.bold,
                             ),
-                      )
-                      .animate(
-                        onPlay: (controller) =>
-                            controller.repeat(reverse: true),
-                      )
-                      .shimmer(
-                        duration: 2000.ms,
-                        color: AppTheme.accent.withOpacity(0.2),
                       ),
-                ],
+                    ],
+                  );
+                },
               ),
             ],
           ),

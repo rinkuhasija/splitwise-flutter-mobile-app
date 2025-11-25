@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/email_service.dart';
 import '../models/group.dart';
 import '../models/expense.dart';
+import '../models/settlement.dart';
 import '../models/user.dart' as app_user;
 
 class DataProvider extends ChangeNotifier {
@@ -129,6 +131,23 @@ class DataProvider extends ChangeNotifier {
       // Create friendship
       await _firestoreService.addFriend(_currentUser!.id, friendId);
 
+      // Send invitation email
+      try {
+        final emailService = EmailService();
+        final emailSent = await emailService.sendInviteEmail(
+          recipientEmail: email,
+          recipientName: name,
+          senderName: _currentUser!.name,
+        );
+
+        if (!emailSent) {
+          print('Warning: Friend added but email invitation failed to send');
+        }
+      } catch (emailError) {
+        print('Error sending invitation email: $emailError');
+        // Don't rethrow - friend was added successfully even if email failed
+      }
+
       // The stream will automatically update the UI
     } catch (e) {
       print('Error adding friend: $e');
@@ -162,11 +181,27 @@ class DataProvider extends ChangeNotifier {
   // Add member to group
   Future<void> addMemberToGroup(String groupId, app_user.User user) async {
     try {
-      await _firestoreService.addMemberToGroup(groupId, user.id);
+      await _firestoreService.addMemberToGroup(groupId, user);
       // The stream will automatically update the UI
     } catch (e) {
       print('Error adding member to group: $e');
       rethrow;
+    }
+  }
+
+  void updateCurrentUser(app_user.User user) {
+    _currentUser = user;
+    notifyListeners();
+  }
+
+  // Reload current user data from Firestore
+  Future<void> reloadCurrentUser() async {
+    if (_currentUser != null) {
+      final updatedUser = await _firestoreService.getUser(_currentUser!.id);
+      if (updatedUser != null) {
+        _currentUser = updatedUser;
+        notifyListeners();
+      }
     }
   }
 
@@ -178,5 +213,114 @@ class DataProvider extends ChangeNotifier {
   Stream<List<Expense>> getUserActivity() {
     if (_currentUser == null) return Stream.value([]);
     return _firestoreService.getUserActivity(_currentUser!.id);
+  }
+
+  Future<double> getGroupBalance(String groupId) async {
+    if (_currentUser == null) return 0.0;
+    final expenses = await _firestoreService.getGroupExpenses(groupId).first;
+    double balance = 0.0;
+
+    for (final expense in expenses) {
+      final paidByMe = expense.payerId == _currentUser!.id;
+      final myShare = expense.splitDetails[_currentUser!.id] ?? 0.0;
+
+      if (paidByMe) {
+        balance += (expense.amount - myShare);
+      } else {
+        balance -= myShare;
+      }
+    }
+    return balance;
+  }
+
+  Future<double> getFriendBalance(String friendId) async {
+    if (_currentUser == null) return 0.0;
+    // This is a simplified calculation. Ideally, we'd query expenses shared with this friend across all groups.
+    // For now, we'll iterate through all loaded groups to find shared expenses.
+    double balance = 0.0;
+
+    for (final group in _groups) {
+      final expenses = await _firestoreService.getGroupExpenses(group.id).first;
+      for (final expense in expenses) {
+        final isFriendInvolved = expense.splitDetails.containsKey(friendId);
+        final isMeInvolved = expense.splitDetails.containsKey(_currentUser!.id);
+
+        if (isFriendInvolved && isMeInvolved) {
+          final paidByMe = expense.payerId == _currentUser!.id;
+          final paidByFriend = expense.payerId == friendId;
+
+          if (paidByMe) {
+            balance += (expense.splitDetails[friendId] ?? 0.0);
+          } else if (paidByFriend) {
+            balance -= (expense.splitDetails[_currentUser!.id] ?? 0.0);
+          }
+        }
+      }
+    }
+    return balance;
+  }
+
+  // ==================== SETTLEMENTS ====================
+
+  // Record a settlement between current user and another user
+  Future<void> recordSettlement({
+    required String otherUserId,
+    required double amount,
+    required String groupId,
+    String? note,
+  }) async {
+    if (_currentUser == null) return;
+
+    try {
+      // Determine who pays whom based on the balance
+      final balance = await getFriendBalance(otherUserId);
+
+      String fromUserId;
+      String toUserId;
+
+      if (balance < 0) {
+        // Current user owes the other user
+        fromUserId = _currentUser!.id;
+        toUserId = otherUserId;
+      } else {
+        // Other user owes current user
+        fromUserId = otherUserId;
+        toUserId = _currentUser!.id;
+      }
+
+      await _firestoreService.recordSettlement(
+        fromUserId: fromUserId,
+        toUserId: toUserId,
+        amount: amount,
+        groupId: groupId,
+        note: note,
+      );
+
+      // Notify listeners to update UI
+      notifyListeners();
+    } catch (e) {
+      print('Error recording settlement: $e');
+      rethrow;
+    }
+  }
+
+  // Get settlement history for current user
+  Stream<List<Settlement>> getSettlementHistory() {
+    if (_currentUser == null) return Stream.value([]);
+    return _firestoreService.getUserSettlements(_currentUser!.id);
+  }
+
+  // Get settlements between current user and a friend
+  Stream<List<Settlement>> getSettlementsBetweenUsers(String friendId) {
+    if (_currentUser == null) return Stream.value([]);
+    return _firestoreService.getSettlementsBetweenUsers(
+      _currentUser!.id,
+      friendId,
+    );
+  }
+
+  // Get settlements for a specific group
+  Stream<List<Settlement>> getGroupSettlements(String groupId) {
+    return _firestoreService.getGroupSettlements(groupId);
   }
 }
